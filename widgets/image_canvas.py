@@ -328,13 +328,17 @@ class ImageCanvas(QGraphicsView):
                 self.image_height
             )
             self.redraw_annotations()
-            self.annotation_modified.emit()
+            # Don't emit annotation_modified here - wait until mouse release
 
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
         """Handle mouse release events"""
         if event.button() == Qt.LeftButton:
+            # Emit modification signal when drag is complete
+            if self.dragging_vertex and self.selected_annotation:
+                self.annotation_modified.emit()
+
             self.dragging_vertex = False
             self.dragging_vertex_index = -1
 

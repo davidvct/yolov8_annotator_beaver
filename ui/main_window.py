@@ -14,6 +14,7 @@ from utils.file_handler import FileHandler
 from utils.yolo_format import (load_annotations, save_annotations, YOLOAnnotation,
                                 get_annotation_path, load_class_names, save_class_names)
 from models.annotation import Annotation
+from utils.undo_redo import UndoRedoManager
 
 
 class MainWindow(QMainWindow):
@@ -36,6 +37,9 @@ class MainWindow(QMainWindow):
 
         # Unsaved changes flag
         self.has_unsaved_changes = False
+
+        # Undo/Redo manager
+        self.undo_manager = UndoRedoManager(max_history=50)
 
         self._setup_ui()
         self._setup_menu()
@@ -171,6 +175,20 @@ class MainWindow(QMainWindow):
         # Edit menu
         edit_menu = menubar.addMenu("Edit")
 
+        self.undo_action = QAction("Undo", self)
+        self.undo_action.setShortcut(QKeySequence.Undo)
+        self.undo_action.triggered.connect(self.undo)
+        self.undo_action.setEnabled(False)
+        edit_menu.addAction(self.undo_action)
+
+        self.redo_action = QAction("Redo", self)
+        self.redo_action.setShortcut(QKeySequence.Redo)
+        self.redo_action.triggered.connect(self.redo)
+        self.redo_action.setEnabled(False)
+        edit_menu.addAction(self.redo_action)
+
+        edit_menu.addSeparator()
+
         delete_action = QAction("Delete Selected", self)
         delete_action.setShortcut(QKeySequence.Delete)
         delete_action.triggered.connect(self.delete_selected_annotation)
@@ -188,6 +206,14 @@ class MainWindow(QMainWindow):
         """Setup the toolbar"""
         toolbar = QToolBar()
         self.addToolBar(toolbar)
+
+        # Undo action
+        toolbar.addAction(self.undo_action)
+
+        # Redo action
+        toolbar.addAction(self.redo_action)
+
+        toolbar.addSeparator()
 
         # Add polygon action
         add_polygon_action = QAction("Add Polygon", self)
@@ -326,6 +352,12 @@ class MainWindow(QMainWindow):
         # Reset unsaved changes flag
         self.has_unsaved_changes = False
 
+        # Clear undo/redo history and push initial state
+        self.undo_manager.clear()
+        self.undo_manager.push_state(self.current_annotations)
+        self.undo_manager.mark_saved()  # Mark initial loaded state as saved
+        self.update_undo_redo_actions()
+
         self.update_status_bar()
 
     def save_annotations(self):
@@ -345,6 +377,8 @@ class MainWindow(QMainWindow):
         save_annotations(label_path, yolo_annotations)
 
         self.has_unsaved_changes = False
+        self.undo_manager.mark_saved()
+        self.update_status_bar()
         self.status_bar.showMessage("Annotations saved", 2000)
 
     def next_image(self):
@@ -386,17 +420,20 @@ class MainWindow(QMainWindow):
     def on_annotation_added(self, annotation):
         """Handle annotation added event"""
         self.has_unsaved_changes = True
+        self.push_undo_state()
         self.annotation_widget.update_annotations_list(self.current_annotations)
         self.status_bar.showMessage("Annotation added", 2000)
 
     def on_annotation_modified(self):
         """Handle annotation modified event"""
         self.has_unsaved_changes = True
+        self.push_undo_state()
         self.annotation_widget.update_annotations_list(self.current_annotations)
 
     def on_annotation_deleted(self, annotation):
         """Handle annotation deleted event"""
         self.has_unsaved_changes = True
+        self.push_undo_state()
         self.annotation_widget.update_annotations_list(self.current_annotations)
         self.status_bar.showMessage("Annotation deleted", 2000)
 
@@ -419,7 +456,40 @@ class MainWindow(QMainWindow):
             self.canvas.redraw_annotations()
             self.annotation_widget.update_annotations_list(self.current_annotations)
             self.has_unsaved_changes = True
+            self.push_undo_state()
             self.status_bar.showMessage(f"Changed annotation class to {class_name}", 2000)
+
+    def push_undo_state(self):
+        """Push the current annotation state to the undo manager"""
+        self.undo_manager.push_state(self.current_annotations)
+        self.update_undo_redo_actions()
+
+    def undo(self):
+        """Undo the last annotation change"""
+        if self.undo_manager.can_undo():
+            self.current_annotations = self.undo_manager.undo()
+            self.canvas.set_annotations(self.current_annotations)
+            self.annotation_widget.update_annotations_list(self.current_annotations)
+            self.has_unsaved_changes = not self.undo_manager.is_saved()
+            self.update_undo_redo_actions()
+            self.update_status_bar()
+            self.status_bar.showMessage("Undo", 2000)
+
+    def redo(self):
+        """Redo the last undone annotation change"""
+        if self.undo_manager.can_redo():
+            self.current_annotations = self.undo_manager.redo()
+            self.canvas.set_annotations(self.current_annotations)
+            self.annotation_widget.update_annotations_list(self.current_annotations)
+            self.has_unsaved_changes = not self.undo_manager.is_saved()
+            self.update_undo_redo_actions()
+            self.update_status_bar()
+            self.status_bar.showMessage("Redo", 2000)
+
+    def update_undo_redo_actions(self):
+        """Update the enabled state of undo/redo actions"""
+        self.undo_action.setEnabled(self.undo_manager.can_undo())
+        self.redo_action.setEnabled(self.undo_manager.can_redo())
 
     def update_status_bar(self):
         """Update the status bar with current information"""
