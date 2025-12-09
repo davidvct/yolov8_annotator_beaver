@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget,
                                 QListWidgetItem, QPushButton, QLabel, QComboBox,
                                 QGroupBox)
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QColor, QBrush
+from PySide6.QtGui import QColor, QBrush, QPalette
 from models.annotation import Annotation
 
 
@@ -49,7 +49,21 @@ class AnnotationListWidget(QWidget):
         annotations_layout = QVBoxLayout()
 
         self.annotations_list = QListWidget()
+        self.annotations_list.setSelectionMode(QListWidget.SingleSelection)
         self.annotations_list.itemClicked.connect(self._on_annotation_clicked)
+
+        # Set blue highlight color for selected items using stylesheet
+        self.annotations_list.setStyleSheet("""
+            QListWidget::item:selected {
+                background-color: rgb(0, 120, 215);
+                color: white;
+            }
+            QListWidget::item:selected:!active {
+                background-color: rgb(0, 120, 215);
+                color: white;
+            }
+        """)
+
         annotations_layout.addWidget(self.annotations_list)
 
         # Buttons
@@ -111,14 +125,11 @@ class AnnotationListWidget(QWidget):
             item_text = f"{i + 1}. {class_name} ({len(annotation.points)} points)"
 
             item = QListWidgetItem(item_text)
-
-            # Set background color to match annotation color
-            item.setBackground(QBrush(annotation.color.lighter(180)))
-
-            if annotation.selected:
-                item.setSelected(True)
-
             self.annotations_list.addItem(item)
+
+            # Highlight selected items after adding to list
+            if annotation.selected:
+                self.annotations_list.setCurrentItem(item)
 
         # Update statistics
         self.stats_label.setText(f"Annotations: {len(annotations)}")
