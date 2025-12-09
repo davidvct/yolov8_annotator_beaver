@@ -1,0 +1,387 @@
+"""
+Image canvas widget for displaying and annotating images.
+"""
+from typing import List, Optional, Tuple
+from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsPolygonItem, QGraphicsEllipseItem
+from PySide6.QtCore import Qt, Signal, QPointF, QRectF
+from PySide6.QtGui import QPixmap, QImage, QPen, QBrush, QColor, QPolygonF, QPainter
+from PIL import Image
+from models.annotation import Annotation
+
+
+class ImageCanvas(QGraphicsView):
+    """Canvas for displaying images and handling annotation interactions"""
+
+    # Signals
+    annotation_added = Signal(Annotation)
+    annotation_modified = Signal()
+    annotation_deleted = Signal(Annotation)
+    annotation_selected = Signal(Annotation)  # Emitted when an annotation is selected
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        # Setup scene
+        self.scene = QGraphicsScene(self)
+        self.setScene(self.scene)
+
+        # Setup view properties
+        self.setRenderHint(QPainter.Antialiasing)
+        self.setRenderHint(QPainter.SmoothPixmapTransform)
+        self.setDragMode(QGraphicsView.NoDrag)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+        # Image data
+        self.pixmap_item: Optional[QGraphicsPixmapItem] = None
+        self.image_path: str = ""
+        self.image_width: int = 0
+        self.image_height: int = 0
+
+        # Annotations
+        self.annotations: List[Annotation] = []
+        self.show_annotations: bool = True
+
+        # Drawing state
+        self.drawing_mode: bool = False
+        self.current_polygon: List[Tuple[float, float]] = []  # Pixel coordinates
+        self.current_class_id: int = 0
+        self.current_class_name: str = ""
+        self.shift_pressed: bool = False  # Track Shift key state during polygon drawing
+
+        # Editing state
+        self.editing_mode: bool = False
+        self.selected_annotation: Optional[Annotation] = None
+        self.dragging_vertex: bool = False
+        self.dragging_vertex_index: int = -1
+
+        # Graphics items for visualization
+        self.polygon_items: List[QGraphicsPolygonItem] = []
+        self.vertex_items: List[List[QGraphicsEllipseItem]] = []
+        self.temp_polygon_item: Optional[QGraphicsPolygonItem] = None
+        self.temp_vertex_items: List[QGraphicsEllipseItem] = []
+
+    def load_image(self, image_path: str) -> bool:
+        """Load an image from file path"""
+        try:
+            # Load image using PIL to handle various formats
+            pil_image = Image.open(image_path)
+            pil_image = pil_image.convert('RGB')
+
+            # Convert PIL image to QPixmap
+            img_data = pil_image.tobytes('raw', 'RGB')
+            qimage = QImage(img_data, pil_image.width, pil_image.height, QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(qimage)
+
+            # Clear scene
+            self.scene.clear()
+            self.polygon_items.clear()
+            self.vertex_items.clear()
+
+            # Add pixmap to scene
+            self.pixmap_item = self.scene.addPixmap(pixmap)
+            self.image_path = image_path
+            self.image_width = pil_image.width
+            self.image_height = pil_image.height
+
+            # Fit image in view
+            self.fitInView(self.pixmap_item, Qt.KeepAspectRatio)
+
+            return True
+
+        except Exception as e:
+            print(f"Error loading image {image_path}: {e}")
+            return False
+
+    def set_annotations(self, annotations: List[Annotation]) -> None:
+        """Set the annotations to display"""
+        self.annotations = annotations
+        self.redraw_annotations()
+
+    def redraw_annotations(self) -> None:
+        """Redraw all annotations on the canvas"""
+        # Clear existing annotation graphics
+        for item in self.polygon_items:
+            self.scene.removeItem(item)
+        for vertex_list in self.vertex_items:
+            for item in vertex_list:
+                self.scene.removeItem(item)
+
+        self.polygon_items.clear()
+        self.vertex_items.clear()
+
+        if not self.show_annotations or not self.pixmap_item:
+            return
+
+        # Draw each annotation
+        for annotation in self.annotations:
+            self._draw_annotation(annotation)
+
+    def _draw_annotation(self, annotation: Annotation) -> None:
+        """Draw a single annotation"""
+        if not self.pixmap_item:
+            return
+
+        # Get pixel points
+        pixel_points = annotation.get_pixel_points(self.image_width, self.image_height)
+
+        # Create polygon
+        polygon = QPolygonF(pixel_points)
+
+        # Set pen and brush based on selection state
+        if annotation.selected:
+            pen = QPen(QColor(255, 255, 0), 3)  # Yellow for selected
+            brush = QBrush(QColor(255, 255, 0, 80))
+        else:
+            pen = QPen(annotation.color.darker(150), 2)
+            brush = QBrush(annotation.color)
+
+        # Add polygon to scene
+        polygon_item = self.scene.addPolygon(polygon, pen, brush)
+        polygon_item.setZValue(1)  # Above image
+        self.polygon_items.append(polygon_item)
+
+        # Draw vertices if selected
+        vertex_list = []
+        if annotation.selected:
+            for point in pixel_points:
+                vertex_item = self.scene.addEllipse(
+                    point.x() - 4, point.y() - 4, 8, 8,
+                    QPen(Qt.yellow, 2),
+                    QBrush(Qt.white)
+                )
+                vertex_item.setZValue(2)  # Above polygon
+                vertex_list.append(vertex_item)
+
+        self.vertex_items.append(vertex_list)
+
+    def toggle_annotation_visibility(self) -> None:
+        """Toggle the visibility of annotations"""
+        self.show_annotations = not self.show_annotations
+        self.redraw_annotations()
+
+    def start_drawing(self, class_id: int, class_name: str = "") -> None:
+        """Start drawing a new polygon annotation"""
+        self.drawing_mode = True
+        self.current_polygon = []
+        self.current_class_id = class_id
+        self.current_class_name = class_name
+        self.setCursor(Qt.CrossCursor)
+
+    def stop_drawing(self) -> None:
+        """Stop drawing mode and cancel current polygon"""
+        self.drawing_mode = False
+        self.current_polygon = []
+        self.shift_pressed = False
+        self._clear_temp_graphics()
+        self.setCursor(Qt.ArrowCursor)
+
+    def finish_polygon(self) -> None:
+        """Finish the current polygon and create an annotation"""
+        if len(self.current_polygon) < 3:
+            print("Polygon needs at least 3 points")
+            self.stop_drawing()
+            return
+
+        # Create annotation from pixel coordinates
+        normalized_points = [
+            (x / self.image_width, y / self.image_height)
+            for x, y in self.current_polygon
+        ]
+
+        annotation = Annotation(self.current_class_id, normalized_points, self.current_class_name)
+        self.annotations.append(annotation)
+        self.annotation_added.emit(annotation)
+
+        # Clear drawing state
+        self.stop_drawing()
+        self.redraw_annotations()
+
+    def _clear_temp_graphics(self) -> None:
+        """Clear temporary graphics (current drawing)"""
+        if self.temp_polygon_item:
+            self.scene.removeItem(self.temp_polygon_item)
+            self.temp_polygon_item = None
+
+        for item in self.temp_vertex_items:
+            self.scene.removeItem(item)
+        self.temp_vertex_items.clear()
+
+    def _draw_temp_polygon(self) -> None:
+        """Draw the polygon currently being created"""
+        self._clear_temp_graphics()
+
+        if len(self.current_polygon) < 2:
+            return
+
+        # Draw polygon
+        points = [QPointF(x, y) for x, y in self.current_polygon]
+        polygon = QPolygonF(points)
+        self.temp_polygon_item = self.scene.addPolygon(
+            polygon,
+            QPen(QColor(0, 255, 0), 2),
+            QBrush(QColor(0, 255, 0, 80))
+        )
+        self.temp_polygon_item.setZValue(1)
+
+        # Draw vertices
+        for x, y in self.current_polygon:
+            vertex_item = self.scene.addEllipse(
+                x - 4, y - 4, 8, 8,
+                QPen(Qt.green, 2),
+                QBrush(Qt.white)
+            )
+            vertex_item.setZValue(2)
+            self.temp_vertex_items.append(vertex_item)
+
+    def delete_selected_annotation(self) -> None:
+        """Delete the currently selected annotation"""
+        if self.selected_annotation and self.selected_annotation in self.annotations:
+            self.annotations.remove(self.selected_annotation)
+            self.annotation_deleted.emit(self.selected_annotation)
+            self.selected_annotation = None
+            self.redraw_annotations()
+
+    def select_annotation_by_index(self, index: int) -> None:
+        """Select an annotation by its index in the annotations list"""
+        if 0 <= index < len(self.annotations):
+            # Deselect all
+            for ann in self.annotations:
+                ann.selected = False
+            # Select the one at the given index
+            self.annotations[index].selected = True
+            self.selected_annotation = self.annotations[index]
+            self.redraw_annotations()
+            self.annotation_selected.emit(self.selected_annotation)
+
+    def mousePressEvent(self, event):
+        """Handle mouse press events"""
+        if not self.pixmap_item:
+            return
+
+        # Map to scene coordinates
+        scene_pos = self.mapToScene(event.pos())
+        x, y = scene_pos.x(), scene_pos.y()
+
+        # Check if click is within image bounds
+        if not (0 <= x <= self.image_width and 0 <= y <= self.image_height):
+            super().mousePressEvent(event)
+            return
+
+        if self.drawing_mode and event.button() == Qt.LeftButton:
+            # Only add point if Shift key is pressed
+            if event.modifiers() & Qt.ShiftModifier:
+                self.current_polygon.append((x, y))
+                self._draw_temp_polygon()
+                self.shift_pressed = True
+
+        elif event.button() == Qt.LeftButton and not self.drawing_mode:
+            # Check if clicking on a vertex of selected annotation
+            if self.selected_annotation:
+                vertex_index = self.selected_annotation.get_nearest_vertex(
+                    (x, y), self.image_width, self.image_height
+                )
+                if self.selected_annotation.contains_point((x, y), self.image_width, self.image_height, tolerance=10):
+                    self.dragging_vertex = True
+                    self.dragging_vertex_index = vertex_index
+                    return
+
+            # Try to select an annotation
+            selected = False
+            for annotation in reversed(self.annotations):  # Check from top to bottom
+                if annotation.is_inside_polygon((x, y), self.image_width, self.image_height):
+                    # Deselect all
+                    for ann in self.annotations:
+                        ann.selected = False
+                    # Select this one
+                    annotation.selected = True
+                    self.selected_annotation = annotation
+                    selected = True
+                    self.redraw_annotations()
+                    self.annotation_selected.emit(annotation)  # Emit selection signal
+                    break
+
+            if not selected:
+                # Deselect all
+                for ann in self.annotations:
+                    ann.selected = False
+                self.selected_annotation = None
+                self.redraw_annotations()
+
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        """Handle mouse move events"""
+        if self.dragging_vertex and self.selected_annotation:
+            scene_pos = self.mapToScene(event.pos())
+            x, y = scene_pos.x(), scene_pos.y()
+
+            # Clamp to image bounds
+            x = max(0, min(self.image_width, x))
+            y = max(0, min(self.image_height, y))
+
+            # Update vertex
+            self.selected_annotation.update_vertex(
+                self.dragging_vertex_index,
+                (x, y),
+                self.image_width,
+                self.image_height
+            )
+            self.redraw_annotations()
+            self.annotation_modified.emit()
+
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        """Handle mouse release events"""
+        if event.button() == Qt.LeftButton:
+            self.dragging_vertex = False
+            self.dragging_vertex_index = -1
+
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        """Handle double-click to finish polygon"""
+        if self.drawing_mode and event.button() == Qt.LeftButton:
+            self.finish_polygon()
+        super().mouseDoubleClickEvent(event)
+
+    def keyPressEvent(self, event):
+        """Handle key press events"""
+        # Let arrow keys and space propagate to parent (main window)
+        if event.key() in (Qt.Key_Left, Qt.Key_Right, Qt.Key_Space):
+            event.ignore()  # Propagate to parent
+            return
+
+        if event.key() == Qt.Key_Escape:
+            if self.drawing_mode:
+                self.stop_drawing()
+            elif self.selected_annotation:
+                for ann in self.annotations:
+                    ann.selected = False
+                self.selected_annotation = None
+                self.redraw_annotations()
+
+        elif event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
+            if self.drawing_mode:
+                self.finish_polygon()
+
+        elif event.key() == Qt.Key_Delete:
+            self.delete_selected_annotation()
+
+        else:
+            super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        """Handle key release events"""
+        # When Shift is released during polygon drawing, finish the polygon
+        if event.key() == Qt.Key_Shift and self.drawing_mode and self.shift_pressed:
+            self.finish_polygon()
+        else:
+            super().keyReleaseEvent(event)
+
+    def resizeEvent(self, event):
+        """Handle resize events"""
+        super().resizeEvent(event)
+        if self.pixmap_item:
+            self.fitInView(self.pixmap_item, Qt.KeepAspectRatio)
