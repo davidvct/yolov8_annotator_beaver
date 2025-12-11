@@ -291,11 +291,13 @@ class MainWindow(QMainWindow):
                 self.load_class_names_from_file()
 
     def load_class_names_from_file(self):
-        """Load class names from classes.txt in labels folder"""
+        """Load class names from classes.txt in dataset root folder"""
         if not self.file_handler.labels_dir:
             return
 
-        classes_file = os.path.join(self.file_handler.labels_dir, "classes.txt")
+        # Place classes.txt in the parent directory of labels folder
+        dataset_root = os.path.dirname(self.file_handler.labels_dir)
+        classes_file = os.path.join(dataset_root, "classes.txt")
         if os.path.exists(classes_file):
             class_names = load_class_names(classes_file)
             if class_names:
