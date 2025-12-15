@@ -233,6 +233,102 @@ class VideoInferenceTab(QWidget):
         """Handle video error"""
         QMessageBox.critical(self, "Video Error", error_msg)
 
+    def get_session_state(self) -> dict:
+        """
+        Get current state for session saving.
+
+        Returns:
+            Dictionary containing video tab state
+        """
+        return {
+            "video_folder": self.video_handler.videos_dir,
+            "model_path": self.inference_engine.model_path,
+            "inference_threshold": self.inference_engine.confidence,
+            "inference_enabled": self.inference_engine.enabled,
+            "current_video_index": self.video_handler.get_current_index()
+        }
+
+    def restore_session_state(self, data: dict) -> list:
+        """
+        Restore state from session data.
+
+        Args:
+            data: Dictionary containing video tab state
+
+        Returns:
+            List of warning messages for paths that don't exist
+        """
+        import os
+        warnings = []
+
+        # Stop any current playback
+        if self.video_thread and self.video_thread.isRunning():
+            self.video_thread.stop()
+
+        # Restore video folder
+        video_folder = data.get("video_folder")
+        if video_folder:
+            if os.path.exists(video_folder):
+                self.video_handler.set_directory(video_folder)
+                self.folder_path_label.setText(video_folder)
+                self.folder_path_label.setStyleSheet("color: black;")
+
+                # Update video list
+                if self.video_handler.has_videos():
+                    self.video_list_widget.set_videos(
+                        self.video_handler.videos_dir,
+                        self.video_handler.video_files
+                    )
+            else:
+                warnings.append(f"Video folder not found: {video_folder}")
+        else:
+            # Reset to default (no folder)
+            self.video_handler.videos_dir = None
+            self.video_handler.video_files = []
+            self.video_handler.current_index = 0
+            self.folder_path_label.setText("Not selected")
+            self.folder_path_label.setStyleSheet("color: gray;")
+            self.video_list_widget.clear()
+            self.video_player.reset()
+
+        # Restore model
+        model_path = data.get("model_path")
+        if model_path:
+            if os.path.exists(model_path):
+                success = self.inference_engine.load_model(model_path)
+                if success:
+                    self.model_path_label.setText(model_path)
+                    self.model_path_label.setStyleSheet("color: black;")
+                else:
+                    warnings.append(f"Failed to load model: {model_path}")
+            else:
+                warnings.append(f"Model file not found: {model_path}")
+        else:
+            # Reset to default (no model)
+            self.inference_engine.model = None
+            self.inference_engine.model_path = None
+            self.model_path_label.setText("Not loaded")
+            self.model_path_label.setStyleSheet("color: gray;")
+
+        # Restore confidence threshold
+        threshold = data.get("inference_threshold", 0.5)
+        slider_value = int(threshold * 100)
+        self.confidence_slider.setValue(slider_value)
+        self.confidence_value_label.setText(f"{threshold:.2f}")
+        self.inference_engine.set_confidence(threshold)
+
+        # Restore inference enabled state
+        enabled = data.get("inference_enabled", True)
+        self.inference_checkbox.setChecked(enabled)
+        self.inference_engine.set_enabled(enabled)
+
+        # Restore current video selection
+        video_index = data.get("current_video_index", 0)
+        if self.video_handler.has_videos() and video_index < self.video_handler.get_total_videos():
+            self.on_video_selected(video_index)
+
+        return warnings
+
     def closeEvent(self, event):
         """Handle widget close"""
         if self.video_thread and self.video_thread.isRunning():

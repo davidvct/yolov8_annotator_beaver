@@ -15,6 +15,7 @@ from widgets.video_inference_tab import VideoInferenceTab
 from utils.file_handler import FileHandler
 from utils.yolo_format import (load_annotations, save_annotations, YOLOAnnotation,
                                 get_annotation_path, load_class_names, save_class_names)
+from utils.session_manager import SessionManager
 from models.annotation import Annotation
 from utils.undo_redo import UndoRedoManager
 
@@ -43,6 +44,9 @@ class MainWindow(QMainWindow):
         # Undo/Redo manager
         self.undo_manager = UndoRedoManager(max_history=50)
 
+        # Session tracking
+        self.current_session_path = None
+
         self._setup_ui()
         self._setup_menu()
         self._setup_toolbar()
@@ -53,6 +57,9 @@ class MainWindow(QMainWindow):
         self.installEventFilter(self)
 
         self.update_status_bar()
+
+        # Auto-load last session if available
+        self._auto_load_last_session()
 
     def _setup_ui(self):
         """Setup the user interface"""
@@ -140,6 +147,20 @@ class MainWindow(QMainWindow):
         # Action buttons
         action_layout = QVBoxLayout()
 
+        # Undo button
+        self.undo_btn = QPushButton("Undo (Ctrl+Z)")
+        self.undo_btn.clicked.connect(self.undo)
+        self.undo_btn.setEnabled(False)
+        self.undo_btn.setFocusPolicy(Qt.NoFocus)
+        action_layout.addWidget(self.undo_btn)
+
+        # Redo button
+        self.redo_btn = QPushButton("Redo (Ctrl+Y)")
+        self.redo_btn.clicked.connect(self.redo)
+        self.redo_btn.setEnabled(False)
+        self.redo_btn.setFocusPolicy(Qt.NoFocus)
+        action_layout.addWidget(self.redo_btn)
+
         self.add_polygon_btn = QPushButton("Add Polygon")
         self.add_polygon_btn.clicked.connect(self.start_adding_polygon)
         self.add_polygon_btn.setEnabled(False)
@@ -152,7 +173,7 @@ class MainWindow(QMainWindow):
         self.toggle_visibility_btn.setFocusPolicy(Qt.NoFocus)
         action_layout.addWidget(self.toggle_visibility_btn)
 
-        self.save_button = QPushButton("Save (Ctrl+S)")
+        self.save_button = QPushButton("Save Annotation (Ctrl+S)")
         self.save_button.clicked.connect(self.save_annotations)
         self.save_button.setEnabled(False)
         self.save_button.setFocusPolicy(Qt.NoFocus)
@@ -182,10 +203,10 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
-        save_action = QAction("Save", self)
-        save_action.setShortcut(QKeySequence.Save)
-        save_action.triggered.connect(self.save_annotations)
-        file_menu.addAction(save_action)
+        self.save_action = QAction("Save", self)
+        self.save_action.setShortcut(QKeySequence.Save)
+        self.save_action.triggered.connect(self.save_annotations_if_annotation_tab)
+        file_menu.addAction(self.save_action)
 
         file_menu.addSeparator()
 
@@ -193,18 +214,41 @@ class MainWindow(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
+        # Session menu
+        session_menu = menubar.addMenu("Session")
+
+        new_session_action = QAction("New Session", self)
+        new_session_action.triggered.connect(self.new_session)
+        session_menu.addAction(new_session_action)
+
+        session_menu.addSeparator()
+
+        open_session_action = QAction("Open Session...", self)
+        open_session_action.setShortcut("Ctrl+O")
+        open_session_action.triggered.connect(self.open_session)
+        session_menu.addAction(open_session_action)
+
+        self.save_session_action = QAction("Save Session", self)
+        self.save_session_action.setShortcut("Ctrl+Shift+S")
+        self.save_session_action.triggered.connect(self.save_session)
+        session_menu.addAction(self.save_session_action)
+
+        save_session_as_action = QAction("Save Session As...", self)
+        save_session_as_action.triggered.connect(self.save_session_as)
+        session_menu.addAction(save_session_as_action)
+
         # Edit menu
         edit_menu = menubar.addMenu("Edit")
 
         self.undo_action = QAction("Undo", self)
         self.undo_action.setShortcut(QKeySequence.Undo)
-        self.undo_action.triggered.connect(self.undo)
+        self.undo_action.triggered.connect(self.undo_if_annotation_tab)
         self.undo_action.setEnabled(False)
         edit_menu.addAction(self.undo_action)
 
         self.redo_action = QAction("Redo", self)
         self.redo_action.setShortcut(QKeySequence.Redo)
-        self.redo_action.triggered.connect(self.redo)
+        self.redo_action.triggered.connect(self.redo_if_annotation_tab)
         self.redo_action.setEnabled(False)
         edit_menu.addAction(self.redo_action)
 
@@ -212,7 +256,7 @@ class MainWindow(QMainWindow):
 
         delete_action = QAction("Delete Selected", self)
         delete_action.setShortcut(QKeySequence.Delete)
-        delete_action.triggered.connect(self.delete_selected_annotation)
+        delete_action.triggered.connect(self.delete_selected_annotation_if_annotation_tab)
         edit_menu.addAction(delete_action)
 
         # View menu
@@ -220,33 +264,13 @@ class MainWindow(QMainWindow):
 
         toggle_action = QAction("Toggle Annotations", self)
         toggle_action.setShortcut(Qt.Key_Space)
-        toggle_action.triggered.connect(self.toggle_annotation_visibility)
+        toggle_action.triggered.connect(self.toggle_annotation_visibility_if_annotation_tab)
         view_menu.addAction(toggle_action)
 
     def _setup_toolbar(self):
         """Setup the toolbar"""
-        toolbar = QToolBar()
-        self.addToolBar(toolbar)
-
-        # Undo action
-        toolbar.addAction(self.undo_action)
-
-        # Redo action
-        toolbar.addAction(self.redo_action)
-
-        toolbar.addSeparator()
-
-        # Add polygon action
-        add_polygon_action = QAction("Add Polygon", self)
-        add_polygon_action.triggered.connect(self.start_adding_polygon)
-        toolbar.addAction(add_polygon_action)
-
-        toolbar.addSeparator()
-
-        # Save action
-        save_action = QAction("Save", self)
-        save_action.triggered.connect(self.save_annotations)
-        toolbar.addAction(save_action)
+        # Toolbar removed - all annotation controls are now in the Annotation tab
+        pass
 
     def _setup_shortcuts(self):
         """Setup keyboard shortcuts"""
@@ -521,6 +545,35 @@ class MainWindow(QMainWindow):
         self.undo_manager.push_state(self.current_annotations)
         self.update_undo_redo_actions()
 
+    def is_annotation_tab_active(self):
+        """Check if the annotation tab is currently active"""
+        return self.tab_widget.currentIndex() == 0
+
+    def undo_if_annotation_tab(self):
+        """Undo only if annotation tab is active"""
+        if self.is_annotation_tab_active():
+            self.undo()
+
+    def redo_if_annotation_tab(self):
+        """Redo only if annotation tab is active"""
+        if self.is_annotation_tab_active():
+            self.redo()
+
+    def save_annotations_if_annotation_tab(self):
+        """Save annotations only if annotation tab is active"""
+        if self.is_annotation_tab_active():
+            self.save_annotations()
+
+    def delete_selected_annotation_if_annotation_tab(self):
+        """Delete selected annotation only if annotation tab is active"""
+        if self.is_annotation_tab_active():
+            self.delete_selected_annotation()
+
+    def toggle_annotation_visibility_if_annotation_tab(self):
+        """Toggle annotation visibility only if annotation tab is active"""
+        if self.is_annotation_tab_active():
+            self.toggle_annotation_visibility()
+
     def undo(self):
         """Undo the last annotation change"""
         if self.undo_manager.can_undo():
@@ -547,6 +600,8 @@ class MainWindow(QMainWindow):
         """Update the enabled state of undo/redo actions"""
         self.undo_action.setEnabled(self.undo_manager.can_undo())
         self.redo_action.setEnabled(self.undo_manager.can_redo())
+        self.undo_btn.setEnabled(self.undo_manager.can_undo())
+        self.redo_btn.setEnabled(self.undo_manager.can_redo())
 
     def update_image_list_highlight(self):
         """Update the highlighted image in the image list"""
@@ -568,7 +623,7 @@ class MainWindow(QMainWindow):
 
     def eventFilter(self, obj, event):
         """Filter events to capture keyboard shortcuts globally"""
-        if event.type() == QEvent.KeyPress:
+        if event.type() == QEvent.KeyPress and self.is_annotation_tab_active():
             if event.key() == Qt.Key_Right:
                 self.next_image()
                 return True
@@ -583,14 +638,240 @@ class MainWindow(QMainWindow):
 
     def keyPressEvent(self, event):
         """Handle key press events"""
-        if event.key() == Qt.Key_Right:
-            self.next_image()
-        elif event.key() == Qt.Key_Left:
-            self.previous_image()
-        elif event.key() == Qt.Key_Space:
-            self.toggle_annotation_visibility()
+        if self.is_annotation_tab_active():
+            if event.key() == Qt.Key_Right:
+                self.next_image()
+            elif event.key() == Qt.Key_Left:
+                self.previous_image()
+            elif event.key() == Qt.Key_Space:
+                self.toggle_annotation_visibility()
+            else:
+                super().keyPressEvent(event)
         else:
             super().keyPressEvent(event)
+
+    # Session management methods
+
+    def _collect_session_data(self) -> dict:
+        """Collect current application state for session saving."""
+        return {
+            "version": "1.0",
+            "annotation_tab": {
+                "images_folder": self.file_handler.images_dir,
+                "labels_folder": self.file_handler.labels_dir,
+                "current_image_index": self.file_handler.get_current_index()
+            },
+            "video_tab": self.video_inference_tab.get_session_state()
+        }
+
+    def _restore_session_data(self, session_data: dict) -> list:
+        """
+        Restore application state from session data.
+
+        Returns:
+            List of warning messages for paths that don't exist
+        """
+        warnings = []
+
+        # Restore annotation tab state
+        annotation_data = session_data.get("annotation_tab", {})
+
+        images_folder = annotation_data.get("images_folder")
+        labels_folder = annotation_data.get("labels_folder")
+
+        # Restore images folder
+        if images_folder:
+            if os.path.exists(images_folder):
+                self.file_handler.images_dir = images_folder
+                self.images_folder_label.setText(f"Images Folder: {images_folder}")
+            else:
+                warnings.append(f"Images folder not found: {images_folder}")
+                images_folder = None
+
+        # Restore labels folder
+        if labels_folder:
+            if os.path.exists(labels_folder):
+                self.file_handler.labels_dir = labels_folder
+                self.labels_folder_label.setText(f"Labels Folder: {labels_folder}")
+            else:
+                warnings.append(f"Labels folder not found: {labels_folder}")
+                labels_folder = None
+
+        # If both folders exist, load the image list and navigate to saved index
+        if images_folder and labels_folder:
+            self.file_handler.set_directories(images_folder, labels_folder)
+            self.update_image_list()
+            self.load_class_names_from_file()
+
+            # Navigate to saved image index
+            image_index = annotation_data.get("current_image_index", 0)
+            if self.file_handler.has_images():
+                if image_index < len(self.file_handler.image_files):
+                    self.file_handler.goto_image(image_index)
+                self.load_current_image()
+
+        # Restore video tab state
+        video_data = session_data.get("video_tab", {})
+        video_warnings = self.video_inference_tab.restore_session_state(video_data)
+        warnings.extend(video_warnings)
+
+        return warnings
+
+    def _update_window_title(self):
+        """Update window title to show session filename."""
+        if self.current_session_path:
+            session_name = os.path.basename(self.current_session_path)
+            self.setWindowTitle(f"YOLOv8 Annotator - {session_name}")
+        else:
+            self.setWindowTitle("YOLOv8 Annotator")
+
+    def _reset_to_defaults(self):
+        """Reset application to default state."""
+        # Reset annotation tab
+        self.file_handler.images_dir = None
+        self.file_handler.labels_dir = None
+        self.file_handler.image_files = []
+        self.file_handler.current_index = 0
+
+        self.images_folder_label.setText("Images Folder: Not selected")
+        self.labels_folder_label.setText("Labels Folder: Not selected")
+        self.image_list_widget.clear()
+        self.canvas.scene.clear()
+        self.canvas.pixmap_item = None
+        self.canvas.annotations = []
+        self.canvas.polygon_items.clear()
+        self.canvas.vertex_items.clear()
+        self.current_annotations = []
+        self.annotation_widget.update_annotations_list([])
+        self.has_unsaved_changes = False
+        self.undo_manager.clear()
+
+        # Disable buttons
+        self.prev_button.setEnabled(False)
+        self.next_button.setEnabled(False)
+        self.add_polygon_btn.setEnabled(False)
+        self.toggle_visibility_btn.setEnabled(False)
+        self.save_button.setEnabled(False)
+        self.update_undo_redo_actions()
+
+        # Reset video tab - restore default session values
+        default_video_state = SessionManager.get_default_session()["video_tab"]
+        self.video_inference_tab.restore_session_state(default_video_state)
+
+        # Clear session path
+        self.current_session_path = None
+        self._update_window_title()
+
+        self.update_status_bar()
+
+    def _auto_load_last_session(self):
+        """Auto-load the last opened session on startup."""
+        last_session_path = SessionManager.get_last_session_path()
+        if last_session_path:
+            session_data = SessionManager.load_session(last_session_path)
+            if session_data is not None:
+                # Restore session without resetting first (already at defaults)
+                warnings = self._restore_session_data(session_data)
+                self.current_session_path = last_session_path
+                self._update_window_title()
+
+                # Show warnings if any paths were missing
+                if warnings:
+                    warning_text = "Last session loaded with warnings:\n\n" + "\n".join(f"- {w}" for w in warnings)
+                    QMessageBox.warning(self, "Session Loaded with Warnings", warning_text)
+                else:
+                    self.status_bar.showMessage(f"Loaded last session: {os.path.basename(last_session_path)}", 3000)
+
+    def new_session(self):
+        """Create a new session (reset to defaults)."""
+        # Prompt to save current annotation changes
+        if not self.prompt_save_changes():
+            return
+
+        self._reset_to_defaults()
+        # Clear the last session path since this is a new session
+        SessionManager.clear_last_session_path()
+        self.status_bar.showMessage("New session created", 2000)
+
+    def open_session(self):
+        """Open a session file."""
+        # Prompt to save current annotation changes
+        if not self.prompt_save_changes():
+            return
+
+        filepath, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open Session",
+            "",
+            "Session Files (*.json);;All Files (*)"
+        )
+
+        if not filepath:
+            return
+
+        session_data = SessionManager.load_session(filepath)
+        if session_data is None:
+            QMessageBox.critical(self, "Error", "Failed to load session file. The file may be corrupted or in an invalid format.")
+            return
+
+        # Reset before restoring
+        self._reset_to_defaults()
+
+        # Restore session
+        warnings = self._restore_session_data(session_data)
+
+        # Update session path and title
+        self.current_session_path = filepath
+        self._update_window_title()
+
+        # Save as last session
+        SessionManager.save_last_session_path(filepath)
+
+        # Show warnings if any paths were missing
+        if warnings:
+            warning_text = "Some paths could not be restored:\n\n" + "\n".join(f"- {w}" for w in warnings)
+            QMessageBox.warning(self, "Session Loaded with Warnings", warning_text)
+        else:
+            self.status_bar.showMessage(f"Session loaded: {os.path.basename(filepath)}", 2000)
+
+    def save_session(self):
+        """Save current session to file."""
+        if self.current_session_path:
+            self._save_session_to_file(self.current_session_path)
+        else:
+            self.save_session_as()
+
+    def save_session_as(self):
+        """Save session to a new file."""
+        filepath, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Session As",
+            "",
+            "Session Files (*.json);;All Files (*)"
+        )
+
+        if not filepath:
+            return
+
+        # Ensure .json extension
+        if not filepath.lower().endswith('.json'):
+            filepath += '.json'
+
+        self._save_session_to_file(filepath)
+
+    def _save_session_to_file(self, filepath: str):
+        """Save session data to the specified file."""
+        session_data = self._collect_session_data()
+        success = SessionManager.save_session(filepath, session_data)
+
+        if success:
+            self.current_session_path = filepath
+            self._update_window_title()
+            # Save as last session
+            SessionManager.save_last_session_path(filepath)
+            self.status_bar.showMessage(f"Session saved: {os.path.basename(filepath)}", 2000)
+        else:
+            QMessageBox.critical(self, "Error", "Failed to save session file.")
 
     def closeEvent(self, event):
         """Handle window close event"""
