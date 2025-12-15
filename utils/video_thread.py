@@ -145,11 +145,19 @@ class VideoThread(QThread):
         # Pause playback
         self.is_paused = True
 
-        # Read next frame
-        ret, frame = self.cap.read()
-        if ret:
-            # Increment frame counter
-            self.current_frame_number += 1
+        # Calculate next frame number
+        total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        next_frame = self.current_frame_number + 1
+
+        # Check bounds
+        if next_frame >= total_frames:
+            return
+
+        # Read next frame without advancing position
+        frame = self._read_frame_at(next_frame)
+        if frame is not None:
+            # Update frame counter
+            self.current_frame_number = next_frame
 
             # Run inference if enabled
             if self.inference_engine and self.inference_engine.is_loaded() and self.inference_engine.enabled:
@@ -177,13 +185,15 @@ class VideoThread(QThread):
         if self.current_frame_number <= 0:
             return
 
-        # Go back one frame
-        self.current_frame_number -= 1
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame_number)
+        # Calculate previous frame number
+        prev_frame = self.current_frame_number - 1
 
-        # Read the frame
-        ret, frame = self.cap.read()
-        if ret:
+        # Read previous frame without advancing position
+        frame = self._read_frame_at(prev_frame)
+        if frame is not None:
+            # Update frame counter
+            self.current_frame_number = prev_frame
+
             # Run inference if enabled
             if self.inference_engine and self.inference_engine.is_loaded() and self.inference_engine.enabled:
                 results = self.inference_engine.predict(frame)
@@ -215,17 +225,14 @@ class VideoThread(QThread):
             # Ensure we don't exceed total frames
             total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
             frame_number = min(frame_number, total_frames - 1)
-
-            # Seek to specific frame for more accuracy
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
         else:
             # Fallback to time-based seek
             self.cap.set(cv2.CAP_PROP_POS_MSEC, position_ms)
             frame_number = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
 
-        # Read frame
-        ret, frame = self.cap.read()
-        if ret:
+        # Read frame without advancing position
+        frame = self._read_frame_at(frame_number)
+        if frame is not None:
             # Run inference if enabled
             if self.inference_engine and self.inference_engine.is_loaded() and self.inference_engine.enabled:
                 results = self.inference_engine.predict(frame)
@@ -243,6 +250,25 @@ class VideoThread(QThread):
             # Update our tracked frame number if paused (for subsequent steps)
             if self.is_paused:
                 self.current_frame_number = frame_number
+
+    def _read_frame_at(self, frame_number: int):
+        """
+        Read a specific frame without advancing the position.
+
+        Args:
+            frame_number: Frame number to read (0-indexed)
+
+        Returns:
+            Frame as numpy array, or None if read failed
+        """
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+        ret, frame = self.cap.read()
+        if ret:
+            # Reset position back to the frame we just read
+            # so subsequent operations start from correct position
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+            return frame
+        return None
 
     def _convert_frame_to_qimage(self, frame: np.ndarray) -> QImage:
         """
