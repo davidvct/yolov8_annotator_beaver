@@ -4,7 +4,7 @@ Video inference tab widget.
 import os
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
                                 QLabel, QSlider, QCheckBox, QFileDialog, QMessageBox, QApplication,
-                                QRadioButton, QButtonGroup)
+                                QRadioButton, QButtonGroup, QSplitter, QSizePolicy)
 from PySide6.QtCore import Qt
 
 from widgets.video_list import VideoListWidget
@@ -37,15 +37,26 @@ class VideoInferenceTab(QWidget):
         main_layout = QHBoxLayout(self)
 
         # Left panel: Video list
+        # Main layout is now a splitter for resizeable panels
+        self.splitter = QSplitter(Qt.Horizontal)
+        main_layout.addWidget(self.splitter, stretch=3)
+
+        # Left panel: Video list
         self.video_list_widget = VideoListWidget()
-        self.video_list_widget.setMaximumWidth(250)
+        # Remove fixed maximum width to allow resizing
+        # self.video_list_widget.setMaximumWidth(250)
         self.video_list_widget.setMinimumWidth(200)
-        main_layout.addWidget(self.video_list_widget, stretch=0)
+        self.splitter.addWidget(self.video_list_widget)
 
         # Center: Video player
         self.video_player = VideoPlayerWidget()
-        self.video_player.setMinimumWidth(600)
-        main_layout.addWidget(self.video_player, stretch=3)
+        self.video_player.setMinimumWidth(400) # Reduced minimum slightly to be more flexible
+        self.splitter.addWidget(self.video_player)
+
+        # Set initial sizes to mimic previous layout (approx 250px for list, rest for player)
+        self.splitter.setSizes([250, 800])
+        self.splitter.setCollapsible(0, False)
+        self.splitter.setCollapsible(1, False)
 
         # Right panel: Controls
         right_panel = QWidget()

@@ -2,8 +2,8 @@
 Video list widget for browsing video files.
 """
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QListWidget, QListWidgetItem,
-                                QLabel, QLineEdit, QHBoxLayout)
-from PySide6.QtCore import Qt, Signal
+                                QLabel, QLineEdit, QHBoxLayout, QMenu, QApplication)
+from PySide6.QtCore import Qt, Signal, QMimeData, QUrl
 
 
 class VideoListWidget(QWidget):
@@ -51,6 +51,10 @@ class VideoListWidget(QWidget):
         self.list_widget.itemClicked.connect(self._on_item_clicked)
         self.list_widget.setVerticalScrollMode(QListWidget.ScrollPerPixel)
         self.list_widget.setStyleSheet("QListWidget::item:selected { background-color: #1e90ff; color: white; }")
+        
+        # Enable custom context menu
+        self.list_widget.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.list_widget.customContextMenuRequested.connect(self._show_context_menu)
 
         layout.addWidget(self.list_widget)
 
@@ -131,3 +135,53 @@ class VideoListWidget(QWidget):
         self.videos_dir = None
         self.current_index = -1
         self.count_label.setText("0 videos")
+
+    def _show_context_menu(self, pos):
+        """Show context menu for list items"""
+        item = self.list_widget.itemAt(pos)
+        if not item:
+            return
+
+        menu = QMenu(self)
+        
+        copy_filename_action = menu.addAction("Copy Filename")
+        copy_filename_action.triggered.connect(lambda: self._copy_filename(item))
+        
+        copy_path_action = menu.addAction("Copy Full Path")
+        copy_path_action.triggered.connect(lambda: self._copy_full_path(item))
+        
+        copy_file_action = menu.addAction("Copy File")
+        copy_file_action.triggered.connect(lambda: self._copy_file(item))
+
+        menu.exec_(self.list_widget.mapToGlobal(pos))
+
+    def _copy_filename(self, item):
+        """Copy just the filename to clipboard"""
+        filename = item.text()
+        clipboard = QApplication.clipboard()
+        clipboard.setText(filename)
+
+    def _copy_full_path(self, item):
+        """Copy full file path to clipboard"""
+        filename = item.text()
+        if self.videos_dir:
+            full_path = f"{self.videos_dir}/{filename}"
+            # Normalize path separators
+            full_path = full_path.replace("/", "\\")
+            clipboard = QApplication.clipboard()
+            clipboard.setText(full_path)
+
+    def _copy_file(self, item):
+        """Copy file object to clipboard (pasteable in Explorer)"""
+        filename = item.text()
+        if self.videos_dir:
+            full_path = f"{self.videos_dir}/{filename}"
+            # Normalize path separators for Windows
+            full_path = full_path.replace("/", "\\")
+            
+            mime_data = QMimeData()
+            url = QUrl.fromLocalFile(full_path)
+            mime_data.setUrls([url])
+            
+            clipboard = QApplication.clipboard()
+            clipboard.setMimeData(mime_data)

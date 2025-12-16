@@ -27,7 +27,8 @@ class SessionManager:
             },
             "video_tab": {
                 "video_folder": None,
-                "model_path": None,
+                "model_paths": {},
+                "active_model_slot": 0,
                 "inference_threshold": 0.5,
                 "inference_enabled": True,
                 "current_video_index": 0
@@ -55,12 +56,18 @@ class SessionManager:
         if "video_tab" not in data:
             return False
         video_tab = data["video_tab"]
+        
+        # Common keys
         required_video_keys = [
-            "video_folder", "model_path", "inference_threshold",
+            "video_folder", "inference_threshold",
             "inference_enabled", "current_video_index"
         ]
         if not all(key in video_tab for key in required_video_keys):
             return False
+            
+        # Check for model keys (support both legacy and new)
+        if "model_paths" not in video_tab and "model_path" not in video_tab:
+             return False
 
         return True
 
