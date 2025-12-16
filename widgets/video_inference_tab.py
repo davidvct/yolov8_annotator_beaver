@@ -3,7 +3,8 @@ Video inference tab widget.
 """
 import os
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
-                                QLabel, QSlider, QCheckBox, QFileDialog, QMessageBox, QApplication)
+                                QLabel, QSlider, QCheckBox, QFileDialog, QMessageBox, QApplication,
+                                QRadioButton, QButtonGroup)
 from PySide6.QtCore import Qt
 
 from widgets.video_list import VideoListWidget
@@ -73,24 +74,60 @@ class VideoInferenceTab(QWidget):
         right_layout.addSpacing(20)
 
         # Model loading
-        model_label = QLabel("Model:")
+        # Model loading (Dual Slots)
+        model_label = QLabel("Inference Models:")
         right_layout.addWidget(model_label)
 
-        self.model_path_label = QLabel("Not loaded")
-        self.model_path_label.setWordWrap(True)
-        self.model_path_label.setStyleSheet("color: gray;")
-        right_layout.addWidget(self.model_path_label)
+        self.model_group = QButtonGroup(self)
+        self.model_group.setExclusive(True)
+        self.model_group.idToggled.connect(self._on_model_group_toggled)
 
-        load_model_btn = QPushButton("Load Model (.pt)")
-        load_model_btn.clicked.connect(self.load_model)
-        load_model_btn.setFocusPolicy(Qt.NoFocus)
+        # --- Model 1 ---
+        model1_layout = QHBoxLayout()
+        self.model1_radio = QRadioButton("Model 1")
+        self.model1_radio.setChecked(True)
+        self.model_group.addButton(self.model1_radio, 0)
+        model1_layout.addWidget(self.model1_radio)
+        right_layout.addLayout(model1_layout)
 
-        right_layout.addWidget(load_model_btn)
+        self.model1_path_label = QLabel("Not loaded")
+        self.model1_path_label.setWordWrap(True)
+        self.model1_path_label.setStyleSheet("color: gray;")
+        right_layout.addWidget(self.model1_path_label)
 
-        remove_model_btn = QPushButton("Remove Model")
-        remove_model_btn.clicked.connect(self.remove_model)
-        remove_model_btn.setFocusPolicy(Qt.NoFocus)
-        right_layout.addWidget(remove_model_btn)
+        btn_layout1 = QHBoxLayout()
+        load_model1_btn = QPushButton("Load Model 1")
+        load_model1_btn.clicked.connect(lambda: self.load_model(0))
+        btn_layout1.addWidget(load_model1_btn)
+        
+        remove_model1_btn = QPushButton("Remove")
+        remove_model1_btn.clicked.connect(lambda: self.remove_model(0))
+        btn_layout1.addWidget(remove_model1_btn)
+        right_layout.addLayout(btn_layout1)
+
+        right_layout.addSpacing(10)
+
+        # --- Model 2 ---
+        model2_layout = QHBoxLayout()
+        self.model2_radio = QRadioButton("Model 2")
+        self.model_group.addButton(self.model2_radio, 1)
+        model2_layout.addWidget(self.model2_radio)
+        right_layout.addLayout(model2_layout)
+
+        self.model2_path_label = QLabel("Not loaded")
+        self.model2_path_label.setWordWrap(True)
+        self.model2_path_label.setStyleSheet("color: gray;")
+        right_layout.addWidget(self.model2_path_label)
+
+        btn_layout2 = QHBoxLayout()
+        load_model2_btn = QPushButton("Load Model 2")
+        load_model2_btn.clicked.connect(lambda: self.load_model(1))
+        btn_layout2.addWidget(load_model2_btn)
+
+        remove_model2_btn = QPushButton("Remove")
+        remove_model2_btn.clicked.connect(lambda: self.remove_model(1))
+        btn_layout2.addWidget(remove_model2_btn)
+        right_layout.addLayout(btn_layout2)
 
         right_layout.addSpacing(20)
 
@@ -223,32 +260,37 @@ class VideoInferenceTab(QWidget):
              if self.video_thread:
                  self.video_thread.stop()
 
-    def load_model(self):
+    def load_model(self, slot_index=0):
         """Open dialog to load YOLO model"""
         model_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Select YOLO Model",
+            f"Select YOLO Model for Slot {slot_index + 1}",
             "",
             "YOLO Models (*.pt)"
         )
 
         if model_path:
-            success = self.inference_engine.load_model(model_path)
+            success = self.inference_engine.load_model(model_path, slot_index)
             if success:
-                self.model_path_label.setText(model_path)
-                self.model_path_label.setStyleSheet("color: black;")
-                QMessageBox.information(self, "Success", "Model loaded successfully!")
+                label = self.model1_path_label if slot_index == 0 else self.model2_path_label
+                label.setText(model_path)
+                label.setStyleSheet("color: black;")
+                QMessageBox.information(self, "Success", f"Model loaded successfully into Slot {slot_index + 1}!")
             else:
                 QMessageBox.critical(self, "Error", "Failed to load model. Please check the file.")
 
-
-
-    def remove_model(self):
+    def remove_model(self, slot_index=0):
         """Unload the current model"""
-        self.inference_engine.unload_model()
-        self.model_path_label.setText("Not loaded")
-        self.model_path_label.setStyleSheet("color: gray;")
-        QMessageBox.information(self, "Success", "Model removed.")
+        self.inference_engine.unload_model(slot_index)
+        label = self.model1_path_label if slot_index == 0 else self.model2_path_label
+        label.setText("Not loaded")
+        label.setStyleSheet("color: gray;")
+        QMessageBox.information(self, "Success", f"Model removed from Slot {slot_index + 1}.")
+
+    def _on_model_group_toggled(self, id, checked):
+        """Handle model selection change"""
+        if checked:
+            self.inference_engine.set_active_slot(id)
 
     def select_export_folder(self):
         """Open dialog to select export output folder"""
@@ -485,7 +527,8 @@ class VideoInferenceTab(QWidget):
         """
         return {
             "video_folder": self.video_handler.videos_dir,
-            "model_path": self.inference_engine.model_path,
+            "model_paths": self.inference_engine.item_paths,
+            "active_model_slot": self.inference_engine.active_slot,
             "inference_threshold": self.inference_engine.confidence,
             "inference_enabled": self.inference_engine.enabled,
             "current_video_index": self.video_handler.get_current_index(),
@@ -534,24 +577,35 @@ class VideoInferenceTab(QWidget):
             self.video_list_widget.clear()
             self.video_player.reset()
 
-        # Restore model
-        model_path = data.get("model_path")
-        if model_path:
-            if os.path.exists(model_path):
-                success = self.inference_engine.load_model(model_path)
-                if success:
-                    self.model_path_label.setText(model_path)
-                    self.model_path_label.setStyleSheet("color: black;")
-                else:
-                    warnings.append(f"Failed to load model: {model_path}")
-            else:
-                warnings.append(f"Model file not found: {model_path}")
+        # Restore models
+        model_paths = data.get("model_paths")
+        if not model_paths and "model_path" in data:
+            # Legacy support
+            model_paths = {0: data["model_path"]}
+
+        if model_paths:
+            # Ensure model_paths is a dict (JSON might give strings as keys)
+            if isinstance(model_paths, dict):
+                for slot_str, path in model_paths.items():
+                    slot = int(slot_str)
+                    if path and os.path.exists(path):
+                        success = self.inference_engine.load_model(path, slot)
+                        if success:
+                            label = self.model1_path_label if slot == 0 else self.model2_path_label
+                            label.setText(path)
+                            label.setStyleSheet("color: black;")
+                        else:
+                             warnings.append(f"Failed to load model (Slot {slot+1}): {path}")
+                    elif path:
+                        warnings.append(f"Model file not found (Slot {slot+1}): {path}")
+        
+        # Restore active slot
+        active_slot = data.get("active_model_slot", 0)
+        if active_slot == 1:
+            self.model2_radio.setChecked(True)
         else:
-            # Reset to default (no model)
-            self.inference_engine.model = None
-            self.inference_engine.model_path = None
-            self.model_path_label.setText("Not loaded")
-            self.model_path_label.setStyleSheet("color: gray;")
+            self.model1_radio.setChecked(True)
+        self.inference_engine.set_active_slot(active_slot)
 
         # Restore confidence threshold
         threshold = data.get("inference_threshold", 0.5)

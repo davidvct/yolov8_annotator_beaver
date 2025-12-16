@@ -9,53 +9,72 @@ class YOLOInference:
     """Handles YOLO model loading and inference"""
 
     def __init__(self):
-        self.model = None
+        self.models = {}  # Dictionary to store loaded models: {slot_index: model}
+        self.item_paths = {} # Dictionary to store model paths: {slot_index: path}
+        self.active_slot = 0 # Currently active slot
         self.confidence = 0.5
         self.enabled = True
-        self.model_path = None
 
-    def load_model(self, path: str) -> bool:
+    def load_model(self, path: str, slot_index: int = 0) -> bool:
         """
-        Load a YOLO model from .pt file
+        Load a YOLO model from .pt file into a specific slot
 
         Args:
             path: Path to .pt model file
+            slot_index: Index of the slot (e.g., 0 or 1)
 
         Returns:
             True if loaded successfully, False otherwise
         """
         try:
             from ultralytics import YOLO
-            self.model = YOLO(path)
-            self.model_path = path
+            model = YOLO(path)
+            self.models[slot_index] = model
+            self.item_paths[slot_index] = path
+            
+            # If this is the only model or we are loading into the active slot, it's ready.
+            # But we don't necessarily force switch unless requested. 
+            # For simplicity, if we load into the active slot, it updates immediately.
             return True
         except Exception as e:
-            print(f"Error loading model: {e}")
-            self.model = None
-            self.model_path = None
-            self.model_path = None
+            print(f"Error loading model into slot {slot_index}: {e}")
+            # If load failed, clear that slot
+            if slot_index in self.models:
+                del self.models[slot_index]
+            if slot_index in self.item_paths:
+                del self.item_paths[slot_index]
             return False
 
-    def unload_model(self):
-        """Unload the current model"""
-        self.model = None
-        self.model_path = None
+    def unload_model(self, slot_index: int = 0):
+        """Unload the model from a specific slot"""
+        if slot_index in self.models:
+            del self.models[slot_index]
+        if slot_index in self.item_paths:
+            del self.item_paths[slot_index]
+
+    def set_active_slot(self, slot_index: int):
+        """Set the active model slot"""
+        self.active_slot = slot_index
 
     def predict(self, frame: np.ndarray):
         """
-        Run inference on a frame
+        Run inference on a frame using the active model
 
         Args:
             frame: Input frame (numpy array in BGR format from OpenCV)
 
         Returns:
-            Results object from ultralytics, or None if model not loaded
+            Results object from ultralytics, or None if active model not loaded
         """
-        if self.model is None or not self.enabled:
+        if not self.enabled:
+            return None
+            
+        model = self.models.get(self.active_slot)
+        if model is None:
             return None
 
         try:
-            results = self.model(frame, conf=self.confidence, verbose=False)
+            results = model(frame, conf=self.confidence, verbose=False)
             return results[0] if results else None
         except Exception as e:
             print(f"Error during inference: {e}")
@@ -76,7 +95,7 @@ class YOLOInference:
             return frame
 
         try:
-            # Use ultralytics built-in plotting which includes boxes, labels, scores, and masks
+            # Use ultralytics built-in plotting
             annotated_frame = results.plot()
             return annotated_frame
         except Exception as e:
@@ -101,10 +120,20 @@ class YOLOInference:
         """
         self.enabled = enabled
 
-    def is_loaded(self) -> bool:
-        """Check if a model is loaded"""
-        return self.model is not None
+    def is_loaded(self, slot_index: Optional[int] = None) -> bool:
+        """
+        Check if a model is loaded. 
+        If slot_index is provided, checks that specific slot.
+        Otherwise checks the active slot.
+        """
+        target_slot = slot_index if slot_index is not None else self.active_slot
+        return target_slot in self.models
 
-    def get_model_path(self) -> Optional[str]:
-        """Get the path of the loaded model"""
-        return self.model_path
+    def get_model_path(self, slot_index: Optional[int] = None) -> Optional[str]:
+        """
+        Get the path of the loaded model.
+        If slot_index is provided, returns path for that slot.
+        Otherwise returns path for active slot.
+        """
+        target_slot = slot_index if slot_index is not None else self.active_slot
+        return self.item_paths.get(target_slot)

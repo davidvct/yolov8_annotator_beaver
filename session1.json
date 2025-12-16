@@ -7,10 +7,14 @@
   },
   "video_tab": {
     "video_folder": "G:/My Drive/programming_projects/yolov8_annotator/videos",
-    "model_path": "G:/My Drive/programming_projects/yolov8_annotator/best.pt",
+    "model_paths": {
+      "0": "G:/My Drive/programming_projects/yolov8_annotator/best-base.pt",
+      "1": "G:/My Drive/programming_projects/yolov8_annotator/best_amri.pt"
+    },
+    "active_model_slot": 0,
     "inference_threshold": 0.71,
     "inference_enabled": true,
-    "current_video_index": 1,
+    "current_video_index": 2,
     "export_output_dir": "G:/My Drive/programming_projects/yolov8_annotator/export"
   }
 }
