@@ -4,8 +4,8 @@ Main window for the YOLOv8 Annotator application.
 import os
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                                 QPushButton, QFileDialog, QStatusBar, QToolBar,
-                                QMessageBox, QLabel, QTabWidget)
-from PySide6.QtCore import Qt, QEvent
+                                QMessageBox, QLabel, QTabWidget, QSplitter)
+from PySide6.QtCore import Qt, QEvent, QByteArray
 from PySide6.QtGui import QAction, QKeySequence
 
 from widgets.image_canvas import ImageCanvas
@@ -89,18 +89,25 @@ class MainWindow(QMainWindow):
         """Create the annotation tab content"""
         # Tab widget
         tab_widget = QWidget()
-        main_layout = QHBoxLayout(tab_widget)
+        
+        # Use a layout to hold the splitter
+        layout = QHBoxLayout(tab_widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # Create Splitter
+        self.annotation_splitter = QSplitter(Qt.Horizontal)
+        layout.addWidget(self.annotation_splitter)
 
         # Left side: Image list
         self.image_list_widget = ImageListWidget()
-        self.image_list_widget.setMaximumWidth(250)
         self.image_list_widget.setMinimumWidth(200)
-        main_layout.addWidget(self.image_list_widget, stretch=0)
+        # self.image_list_widget.setMaximumWidth(250) # Removed to allow resizing
+        self.annotation_splitter.addWidget(self.image_list_widget)
 
         # Center: Image canvas
         self.canvas = ImageCanvas()
-        self.canvas.setMinimumWidth(600)
-        main_layout.addWidget(self.canvas, stretch=3)
+        self.canvas.setMinimumWidth(400) # Reduced minimum to allow more flexibility
+        self.annotation_splitter.addWidget(self.canvas)
 
         # Right side: Annotation controls
         right_panel = QWidget()
@@ -188,7 +195,16 @@ class MainWindow(QMainWindow):
         right_layout.addLayout(action_layout)
 
         right_panel.setMaximumWidth(350)
-        main_layout.addWidget(right_panel, stretch=1)
+        self.annotation_splitter.addWidget(right_panel)
+        
+        # Set initial sizes [Image list, Canvas, Controls]
+        # Canvas gets the most space
+        self.annotation_splitter.setSizes([250, 800, 300])
+        
+        # Set stretch factors to prioritize canvas resizing
+        self.annotation_splitter.setStretchFactor(0, 0) # Image list
+        self.annotation_splitter.setStretchFactor(1, 1) # Canvas
+        self.annotation_splitter.setStretchFactor(2, 0) # Controls
 
         return tab_widget
 
@@ -705,7 +721,8 @@ class MainWindow(QMainWindow):
             "annotation_tab": {
                 "images_folder": self.file_handler.images_dir,
                 "labels_folder": self.file_handler.labels_dir,
-                "current_image_index": self.file_handler.get_current_index()
+                "current_image_index": self.file_handler.get_current_index(),
+                "annotation_splitter_state": self.annotation_splitter.saveState().toBase64().data().decode()
             },
             "video_tab": self.video_inference_tab.get_session_state()
         }
@@ -755,6 +772,11 @@ class MainWindow(QMainWindow):
                 if image_index < len(self.file_handler.image_files):
                     self.file_handler.goto_image(image_index)
                 self.load_current_image()
+
+        # Restore splitter state
+        splitter_state = annotation_data.get("annotation_splitter_state")
+        if splitter_state:
+            self.annotation_splitter.restoreState(QByteArray.fromBase64(bytes(splitter_state, 'utf-8')))
 
         # Restore video tab state
         video_data = session_data.get("video_tab", {})

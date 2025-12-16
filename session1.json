@@ -3,7 +3,8 @@
   "annotation_tab": {
     "images_folder": "G:/My Drive/programming_projects/yolov8_annotator/export/images",
     "labels_folder": "G:/My Drive/programming_projects/yolov8_annotator/export/labels",
-    "current_image_index": 2
+    "current_image_index": 2,
+    "annotation_splitter_state": "AAAA/wAAAAEAAAADAAABkAAAAqoAAAEsAf////8BAAAAAQA="
   },
   "video_tab": {
     "video_folder": "G:/My Drive/programming_projects/yolov8_annotator/videos",
@@ -15,6 +16,7 @@
     "inference_threshold": 0.71,
     "inference_enabled": true,
     "current_video_index": 2,
-    "export_output_dir": "G:/My Drive/programming_projects/yolov8_annotator/export"
+    "export_output_dir": "G:/My Drive/programming_projects/yolov8_annotator/export",
+    "splitter_state": "AAAA/wAAAAEAAAACAAABcAAAAo0B/////wEAAAABAA=="
   }
 }

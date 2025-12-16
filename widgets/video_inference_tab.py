@@ -5,7 +5,7 @@ import os
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
                                 QLabel, QSlider, QCheckBox, QFileDialog, QMessageBox, QApplication,
                                 QRadioButton, QButtonGroup, QSplitter, QSizePolicy)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QByteArray
 
 from widgets.video_list import VideoListWidget
 from widgets.video_player import VideoPlayerWidget
@@ -543,7 +543,8 @@ class VideoInferenceTab(QWidget):
             "inference_threshold": self.inference_engine.confidence,
             "inference_enabled": self.inference_engine.enabled,
             "current_video_index": self.video_handler.get_current_index(),
-            "export_output_dir": self.export_output_dir
+            "export_output_dir": self.export_output_dir,
+            "splitter_state": self.splitter.saveState().toBase64().data().decode()
         }
 
     def restore_session_state(self, data: dict) -> list:
@@ -658,6 +659,10 @@ class VideoInferenceTab(QWidget):
             # Don't disable button here, it depends on video presence now
             self.export_button.setEnabled(self.video_handler.has_current_video())
 
+        # Restore splitter state
+        splitter_state = data.get("splitter_state")
+        if splitter_state:
+            self.splitter.restoreState(QByteArray.fromBase64(bytes(splitter_state, 'utf-8')))
 
         return warnings
 
