@@ -26,6 +26,9 @@ videos/
 *.pt
 .env
 export/
+*.bat
+*.spec
+session1.json
 
 # Virtual Environment
 venv/

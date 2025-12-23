@@ -3,8 +3,8 @@
   "annotation_tab": {
     "images_folder": "G:/My Drive/programming_projects/yolov8_annotator/export/images",
     "labels_folder": "G:/My Drive/programming_projects/yolov8_annotator/export/labels",
-    "current_image_index": 2,
-    "annotation_splitter_state": "AAAA/wAAAAEAAAADAAABkAAAAqoAAAEsAf////8BAAAAAQA="
+    "current_image_index": 4,
+    "annotation_splitter_state": "AAAA/wAAAAEAAAADAAAB+AAABswAAAEsAf////8BAAAAAQA="
   },
   "video_tab": {
     "video_folder": "G:/My Drive/programming_projects/yolov8_annotator/videos",
@@ -12,11 +12,11 @@
       "0": "G:/My Drive/programming_projects/yolov8_annotator/best-base.pt",
       "1": "G:/My Drive/programming_projects/yolov8_annotator/best_amri.pt"
     },
-    "active_model_slot": 0,
-    "inference_threshold": 0.71,
+    "active_model_slot": 1,
+    "inference_threshold": 0.7,
     "inference_enabled": true,
-    "current_video_index": 2,
+    "current_video_index": 1,
     "export_output_dir": "G:/My Drive/programming_projects/yolov8_annotator/export",
-    "splitter_state": "AAAA/wAAAAEAAAACAAABcAAAAo0B/////wEAAAABAA=="
+    "splitter_state": "AAAA/wAAAAEAAAACAAAB1AAABqsB/////wEAAAABAA=="
   }
 }
