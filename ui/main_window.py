@@ -17,7 +17,14 @@ from utils.yolo_format import (load_annotations, save_annotations, YOLOAnnotatio
                                 get_annotation_path, load_class_names, save_class_names)
 from utils.session_manager import SessionManager
 from models.annotation import Annotation
+from models.annotation import Annotation
 from utils.undo_redo import UndoRedoManager
+from version_info import VERSION
+
+try:
+    from build_info import BUILD_DATE
+except ImportError:
+    BUILD_DATE = "Development Build"
 
 
 class MainWindow(QMainWindow):
@@ -298,6 +305,13 @@ class MainWindow(QMainWindow):
         toggle_action.setShortcut(Qt.Key_Space)
         toggle_action.triggered.connect(self.toggle_annotation_visibility_if_annotation_tab)
         view_menu.addAction(toggle_action)
+
+        # About menu
+        about_menu = menubar.addMenu("About")
+
+        about_action = QAction("About", self)
+        about_action.triggered.connect(self.show_about_dialog)
+        about_menu.addAction(about_action)
 
     def _setup_toolbar(self):
         """Setup the toolbar"""
@@ -987,6 +1001,14 @@ class MainWindow(QMainWindow):
             self.last_saved_session_data = self._collect_session_data()
         else:
             QMessageBox.critical(self, "Error", "Failed to save session file.")
+
+    def show_about_dialog(self):
+        """Show about dialog"""
+        QMessageBox.about(self, "About Beaver App",
+                          "Beaver App\n"
+                          f"version {VERSION}\n"
+                          "by David Thien\n"
+                          f"{BUILD_DATE}")
 
     def closeEvent(self, event):
         """Handle window close event"""

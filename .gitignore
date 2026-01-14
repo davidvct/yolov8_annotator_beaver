@@ -52,3 +52,6 @@ Thumbs.db
 # Custom
 data_for_test/
 data_for_tset/
+
+# Generated
+build_info.py

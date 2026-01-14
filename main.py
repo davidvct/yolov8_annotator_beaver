@@ -7,6 +7,7 @@ Usage:
 import sys
 from PySide6.QtWidgets import QApplication
 from ui.main_window import MainWindow
+from version_info import VERSION
 
 
 def main():
@@ -14,9 +15,9 @@ def main():
     app = QApplication(sys.argv)
 
     # Set application metadata
-    app.setApplicationName("YOLOv8 Annotator")
+    app.setApplicationName("YOLOv8 Annotator Beaver")
     app.setOrganizationName("YOLOv8")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationVersion(VERSION)
 
     # Create and show main window
     window = MainWindow()
