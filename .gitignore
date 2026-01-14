@@ -8,6 +8,7 @@ __pycache__/
 *.so
 .Python
 build/
+obf_dist/
 develop-eggs/
 dist/
 downloads/
