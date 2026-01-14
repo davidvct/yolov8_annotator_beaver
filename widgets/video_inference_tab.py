@@ -230,6 +230,7 @@ class VideoInferenceTab(QWidget):
         # Export signal
         self.export_button.clicked.connect(self.on_export_frame)
 
+
     def select_video_folder(self):
         """Open dialog to select video folder"""
         folder = QFileDialog.getExistingDirectory(self, "Select Video Folder")
@@ -671,3 +672,4 @@ class VideoInferenceTab(QWidget):
         if self.video_thread and self.video_thread.isRunning():
             self.video_thread.stop()
         event.accept()
+

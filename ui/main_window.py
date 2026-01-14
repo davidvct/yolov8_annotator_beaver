@@ -160,6 +160,13 @@ class MainWindow(QMainWindow):
         # Action buttons
         action_layout = QVBoxLayout()
 
+        # Instruction label
+        instruction_label = QLabel("Hold Shift and left-click to create polygon")
+        instruction_label.setWordWrap(True)
+        instruction_label.setAlignment(Qt.AlignCenter)
+        instruction_label.setStyleSheet("font-weight: bold; color: #555;")
+        action_layout.addWidget(instruction_label)
+
         # Undo button
         self.undo_btn = QPushButton("Undo (Ctrl+Z)")
         self.undo_btn.clicked.connect(self.undo)
@@ -174,13 +181,10 @@ class MainWindow(QMainWindow):
         self.redo_btn.setFocusPolicy(Qt.NoFocus)
         action_layout.addWidget(self.redo_btn)
 
-        self.add_polygon_btn = QPushButton("Add Polygon (hold Shift key)")
-        self.add_polygon_btn.clicked.connect(self.start_adding_polygon)
-        self.add_polygon_btn.setEnabled(False)
-        self.add_polygon_btn.setFocusPolicy(Qt.NoFocus)
-        action_layout.addWidget(self.add_polygon_btn)
 
-        self.toggle_visibility_btn = QPushButton("Toggle Annotations (Space)")
+
+
+        self.toggle_visibility_btn = QPushButton("Show/hide Annotation (Space)")
         self.toggle_visibility_btn.clicked.connect(self.toggle_annotation_visibility)
         self.toggle_visibility_btn.setEnabled(False)
         self.toggle_visibility_btn.setFocusPolicy(Qt.NoFocus)
@@ -191,6 +195,12 @@ class MainWindow(QMainWindow):
         self.save_button.setEnabled(False)
         self.save_button.setFocusPolicy(Qt.NoFocus)
         action_layout.addWidget(self.save_button)
+
+        self.delete_all_btn = QPushButton("Delete All Annotation (Shift + Delete)")
+        self.delete_all_btn.clicked.connect(self.delete_all_annotations)
+        self.delete_all_btn.setEnabled(False)
+        self.delete_all_btn.setFocusPolicy(Qt.NoFocus)
+        action_layout.addWidget(self.delete_all_btn)
 
         right_layout.addLayout(action_layout)
 
@@ -314,6 +324,27 @@ class MainWindow(QMainWindow):
 
         # Image list widget signals
         self.image_list_widget.image_selected.connect(self.on_image_list_selected)
+        
+        # Connect class change to canvas
+        self.annotation_widget.class_changed.connect(self.update_canvas_class)
+
+    def update_canvas_class(self, class_id):
+        """Update current class in canvas"""
+        class_name = self.class_names[class_id] if class_id < len(self.class_names) else f"Class {class_id}"
+        self.canvas.set_current_class(class_id, class_name)
+
+    def delete_all_annotations(self):
+        """Delete all annotations for the current image"""
+        if not self.current_annotations:
+            return
+            
+        # No confirmation needed, undo is available
+        self.current_annotations = []
+        self.canvas.set_annotations(self.current_annotations)
+        self.annotation_widget.update_annotations_list(self.current_annotations)
+        self.has_unsaved_changes = True
+        self.push_undo_state()
+        self.status_bar.showMessage("All annotations deleted (Undo available)", 2000)
 
     def select_images_folder(self):
         """Open dialog to select images folder"""
@@ -366,6 +397,10 @@ class MainWindow(QMainWindow):
         else:
             # Create default classes.txt
             save_class_names(classes_file, self.class_names)
+        
+        # Ensure canvas has the current class info
+        current_class_id = self.annotation_widget.get_current_class_id()
+        self.update_canvas_class(current_class_id)
 
     def update_image_list(self):
         """Update the image list widget with current images"""
@@ -445,9 +480,10 @@ class MainWindow(QMainWindow):
         # Enable buttons
         self.prev_button.setEnabled(True)
         self.next_button.setEnabled(True)
-        self.add_polygon_btn.setEnabled(True)
+        self.toggle_visibility_btn.setEnabled(True)
         self.toggle_visibility_btn.setEnabled(True)
         self.save_button.setEnabled(True)
+        self.delete_all_btn.setEnabled(True)
 
         # Reset unsaved changes flag
         self.has_unsaved_changes = False
@@ -667,6 +703,8 @@ class MainWindow(QMainWindow):
                 self.previous_image()
             elif event.key() == Qt.Key_Space:
                 self.toggle_annotation_visibility()
+            elif event.key() == Qt.Key_Delete and (event.modifiers() & Qt.ShiftModifier):
+                self.delete_all_annotations()
             else:
                 super().keyPressEvent(event)
         else:

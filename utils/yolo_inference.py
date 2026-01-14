@@ -236,7 +236,7 @@ class YOLOSeg:
             raise ImportError("onnxruntime is not installed.")
             
         self.session = onnxruntime.InferenceSession(path,
-                                                    providers=['CPUExecutionProvider'])
+                                                    providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
         # Get model info
         self.get_input_details()
         self.get_output_details()

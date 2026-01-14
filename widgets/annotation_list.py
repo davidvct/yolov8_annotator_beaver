@@ -68,7 +68,7 @@ class AnnotationListWidget(QWidget):
 
         # Buttons
         button_layout = QHBoxLayout()
-        self.delete_button = QPushButton("Delete Selected")
+        self.delete_button = QPushButton("Delete Selected (Delete)")
         self.delete_button.clicked.connect(self._on_delete_clicked)
         self.delete_button.setEnabled(False)
         self.delete_button.setFocusPolicy(Qt.NoFocus)

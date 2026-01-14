@@ -4,7 +4,8 @@ Video player widget with playback controls.
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                 QPushButton, QSlider)
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap, QImage
+from PySide6.QtGui import QPixmap, QImage, QPainter, QColor, QFont
+import time
 
 
 class VideoPlayerWidget(QWidget):
@@ -24,6 +25,11 @@ class VideoPlayerWidget(QWidget):
         self.is_playing = False
         self.duration_ms = 0
         self.total_frames = 0
+        
+        # FPS Calculation
+        self.fps_start_time = time.time()
+        self.fps_frame_count = 0
+        self.current_fps = 0.0
 
         self._setup_ui()
 
@@ -42,6 +48,7 @@ class VideoPlayerWidget(QWidget):
 
         # Controls layout
         controls_layout = QHBoxLayout()
+
 
         # Step backward button
         self.step_backward_button = QPushButton("◀ Step")
@@ -115,6 +122,7 @@ class VideoPlayerWidget(QWidget):
 
         self.slider_pressed = False
 
+
     def _on_play_clicked(self):
         """Handle play button click"""
         self.is_playing = True
@@ -176,7 +184,23 @@ class VideoPlayerWidget(QWidget):
             image: QImage to display
         """
         if image:
+            # Calculate FPS
+            self.fps_frame_count += 1
+            elapsed = time.time() - self.fps_start_time
+            if elapsed >= 1.0:
+                self.current_fps = self.fps_frame_count / elapsed
+                self.fps_frame_count = 0
+                self.fps_start_time = time.time()
+
             pixmap = QPixmap.fromImage(image)
+            
+            # Draw FPS
+            painter = QPainter(pixmap)
+            painter.setPen(QColor("yellow"))
+            painter.setFont(QFont("Arial", 48, QFont.Bold))
+            painter.drawText(10, pixmap.height() - 20, f"FPS: {self.current_fps:.1f}")
+            painter.end()
+
             # Scale to fit while maintaining aspect ratio
             scaled_pixmap = pixmap.scaled(
                 self.video_label.size(),

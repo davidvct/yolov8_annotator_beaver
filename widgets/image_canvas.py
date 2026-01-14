@@ -145,8 +145,9 @@ class ImageCanvas(QGraphicsView):
         vertex_list = []
         if annotation.selected:
             for point in pixel_points:
+                # Triple size: 8x8 -> 24x24
                 vertex_item = self.scene.addEllipse(
-                    point.x() - 4, point.y() - 4, 8, 8,
+                    point.x() - 12, point.y() - 12, 24, 24,
                     QPen(Qt.yellow, 2),
                     QBrush(Qt.white)
                 )
@@ -211,28 +212,32 @@ class ImageCanvas(QGraphicsView):
         """Draw the polygon currently being created"""
         self._clear_temp_graphics()
 
-        if len(self.current_polygon) < 2:
-            return
+        # Draw polygon lines/fill only if we have at least 2 points
+        if len(self.current_polygon) >= 2:
+            points = [QPointF(x, y) for x, y in self.current_polygon]
+            polygon = QPolygonF(points)
+            self.temp_polygon_item = self.scene.addPolygon(
+                polygon,
+                QPen(QColor(0, 255, 0), 2),
+                QBrush(QColor(0, 255, 0, 80))
+            )
+            self.temp_polygon_item.setZValue(1)
 
-        # Draw polygon
-        points = [QPointF(x, y) for x, y in self.current_polygon]
-        polygon = QPolygonF(points)
-        self.temp_polygon_item = self.scene.addPolygon(
-            polygon,
-            QPen(QColor(0, 255, 0), 2),
-            QBrush(QColor(0, 255, 0, 80))
-        )
-        self.temp_polygon_item.setZValue(1)
-
-        # Draw vertices
+        # Draw vertices for ALL points (including the first one)
         for x, y in self.current_polygon:
+            # Triple size: 8x8 -> 24x24
             vertex_item = self.scene.addEllipse(
-                x - 4, y - 4, 8, 8,
+                x - 12, y - 12, 24, 24,
                 QPen(Qt.green, 2),
                 QBrush(Qt.white)
             )
             vertex_item.setZValue(2)
             self.temp_vertex_items.append(vertex_item)
+
+    def set_current_class(self, class_id: int, class_name: str) -> None:
+        """Set the current class for new annotations"""
+        self.current_class_id = class_id
+        self.current_class_name = class_name
 
     def delete_selected_annotation(self) -> None:
         """Delete the currently selected annotation"""
@@ -268,14 +273,24 @@ class ImageCanvas(QGraphicsView):
             super().mousePressEvent(event)
             return
 
-        if self.drawing_mode and event.button() == Qt.LeftButton:
-            # Only add point if Shift key is pressed
+        if event.button() == Qt.LeftButton:
+            # Check for Shift+Click to add points (start drawing if needed)
             if event.modifiers() & Qt.ShiftModifier:
+                if not self.drawing_mode:
+                    self.start_drawing(self.current_class_id, self.current_class_name)
+                
                 self.current_polygon.append((x, y))
                 self._draw_temp_polygon()
                 self.shift_pressed = True
+                return
 
-        elif event.button() == Qt.LeftButton and not self.drawing_mode:
+            if self.drawing_mode:
+                # If drawing mode is on but Shift is NOT pressed, ignore or handle differently?
+                # The original requirement says "holding shift key... will add a point".
+                # Existing code enforced shift modifier for adding points.
+                # We'll stick to requiring Shift for adding points to be consistent.
+                return
+
             # Check if clicking on a vertex of selected annotation
             if self.selected_annotation:
                 vertex_index = self.selected_annotation.get_nearest_vertex(
@@ -371,6 +386,10 @@ class ImageCanvas(QGraphicsView):
                 self.finish_polygon()
 
         elif event.key() == Qt.Key_Delete:
+            # If Shift+Delete, ignore it so parent (MainWindow) can handle "Delete All"
+            if event.modifiers() & Qt.ShiftModifier:
+                event.ignore()
+                return
             self.delete_selected_annotation()
 
         else:

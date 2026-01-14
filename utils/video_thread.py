@@ -2,6 +2,7 @@
 Video processing thread for smooth playback and inference.
 """
 import cv2
+import time
 import numpy as np
 from PySide6.QtCore import QThread, Signal, QMutex, QMutexLocker
 from PySide6.QtGui import QImage
@@ -108,6 +109,8 @@ class VideoThread(QThread):
         self.current_frame_number = 0
 
         while not self.should_stop:
+            loop_start_time = time.time()
+            
             # Handle seek
             if self.seek_position >= 0:
                 with QMutexLocker(self.mutex):
@@ -151,10 +154,12 @@ class VideoThread(QThread):
             # Update position signal using captured values
             self.position_changed.emit(position_ms, self.current_frame_number)
 
-            # Control playback speed (basic timing)
+            # Control playback speed (dynamic timing)
             if self.fps > 0:
-                delay_ms = int(1000 / self.fps)
-                self.msleep(delay_ms)
+                processing_time_ms = (time.time() - loop_start_time) * 1000
+                target_delay_ms = int(1000 / self.fps)
+                actual_delay = max(1, int(target_delay_ms - processing_time_ms))
+                self.msleep(actual_delay)
 
         # Cleanup
         if self.cap:
@@ -165,9 +170,11 @@ class VideoThread(QThread):
     def play(self):
         """Start or resume playback"""
         if not self.is_playing:
-            self.start()
-        else:
-            self.is_paused = False
+            if not self.isRunning():
+                self.start()
+        self.is_paused = False
+        self.is_playing = True
+
 
     def pause(self):
         """Pause playback"""
