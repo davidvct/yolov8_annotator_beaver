@@ -162,7 +162,10 @@ yolov8_annotator/
 
 ## Building the Executable
 
-To create a standalone executable:
+To create a standalone executable, you have two options:
+
+### Option 1: Standard Build (Unprotected)
+Suitable for internal use or testing.
 
 1.  **Activate Environment**
     ```bash
@@ -175,8 +178,26 @@ To create a standalone executable:
     python build_app.py
     ```
 
-3.  **Locate EXE**
+3.  **Output**
     The app will be built in `dist/YOLOv8Annotator/YOLOv8Annotator.exe`.
+
+### Option 2: Protected Build (PyArmor + PyInstaller)
+**Recommended for distribution.** uses PyArmor to obfuscate the source code of `utils` and `widgets` modules before packaging.
+
+1.  **Activate Environment**
+    ```bash
+    conda activate yolov8_annotator_env
+    pip install pyinstaller pyarmor
+    ```
+
+2.  **Run Protected Build Script**
+    ```bash
+    python build_protected_app.py
+    ```
+
+3.  **Output**
+    The app will be built in `dist/YOLOv8 Annotator Beaver/YOLOv8 Annotator Beaver.exe`.
+    *   Note: The executable name is synced with the application name in `main.py`.
 
 ## License
 
