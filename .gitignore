@@ -48,3 +48,7 @@ ENV/
 .DS_Store
 Thumbs.db
 .aider*
+
+# Custom
+data_for_test/
+data_for_tset/

@@ -277,7 +277,7 @@ class VideoInferenceTab(QWidget):
             self,
             f"Select YOLO Model for Slot {slot_index + 1}",
             "",
-            "YOLO Models (*.pt)"
+            "YOLO Models (*.pt *.onnx)"
         )
 
         if model_path:

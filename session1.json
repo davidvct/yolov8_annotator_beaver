@@ -1,22 +1,22 @@
 {
   "version": "1.0",
   "annotation_tab": {
-    "images_folder": "G:/My Drive/programming_projects/yolov8_annotator/export/images",
-    "labels_folder": "G:/My Drive/programming_projects/yolov8_annotator/export/labels",
-    "current_image_index": 4,
+    "images_folder": null,
+    "labels_folder": null,
+    "current_image_index": 0,
     "annotation_splitter_state": "AAAA/wAAAAEAAAADAAAB+AAABswAAAEsAf////8BAAAAAQA="
   },
   "video_tab": {
-    "video_folder": "G:/My Drive/programming_projects/yolov8_annotator/videos",
+    "video_folder": "L:/DataScience_L/David/beaver/data_for_test/videos",
     "model_paths": {
-      "0": "G:/My Drive/programming_projects/yolov8_annotator/best-base.pt",
-      "1": "G:/My Drive/programming_projects/yolov8_annotator/best_amri.pt"
+      "0": "L:/DataScience_L/David/beaver/data_for_test/model/best.onnx",
+      "1": "L:/DataScience_L/David/beaver/data_for_test/model/best.pt"
     },
     "active_model_slot": 1,
     "inference_threshold": 0.7,
     "inference_enabled": true,
-    "current_video_index": 1,
-    "export_output_dir": "G:/My Drive/programming_projects/yolov8_annotator/export",
+    "current_video_index": 0,
+    "export_output_dir": "L:/DataScience_L/David/beaver/data_for_test/frames",
     "splitter_state": "AAAA/wAAAAEAAAACAAAB1AAABqsB/////wEAAAABAA=="
   }
 }
